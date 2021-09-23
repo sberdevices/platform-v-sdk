@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+    <meta charset="UTF-8">
+    <title>Apigateway Signature Test</title>
+    <link rel="stylesheet" href="js/bootstrap.min.css">
+</head>
+<body class="bg-light">
+
+<div class="container">
+    <div class="py-3 text-center">
+        <h2>Apigateway Signature Test</h2>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12 order-md-1">
+            <div class="needs-validation">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="appkey">Key</label>
+                        <input type="text" class="form-control" id="appkey" value="" required>
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        <label for="appsecret">Secret</label>
+                        <input type="text" class="form-control" id="appsecret" value="" required>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-2 mb-3">
+                        <label for="method">Method</label>
+                        <select class="custom-select d-block w-100" id="method" required>
+                            <option>GET</option>
+                            <option>POST</option>
+                            <option>PUT</option>
+                            <option>DELETE</option>
+                            <option>HEAD</option>
+                        </select>
+                    </div>
+                    <div class="col-md-10 mb-3">
+                        <label for="url">Url</label>
+                        <input type="text" class="form-control" id="url" placeholder="" value="" required>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="headers">Headers</label>
+                    <table class="table table-striped" id="headers">
+                    </table>
+                    <button class="btn btn-primary" id="btn-add">Add</button>
+                </div>
+
+                <div class="mb-3">
+                    <label for="body">Body</label>
+                    <textarea class="form-control" id="body"></textarea>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <button class="btn btn-outline-primary btn-lg btn-block" type="submit" id="btn-debug">Debug
+                        </button>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <button class="btn btn-primary btn-lg btn-block" type="submit" id="submit">Send request</button>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <textarea disabled="true" class="form-control" id="curl"
+                              style="word-wrap: break-word;word-break:break-all"></textarea>
+                </div>
+                <div>Note: accessing the API from browser requires <a target="_blank"
+                                                                      href="https://support.huaweicloud.com/usermanual-apig/apig-zh-ug-180621094.html">support
+                    for CORS</a></div>
+                <b id="status"></b>
+                <div style="word-wrap: break-word;word-break:break-all" id="recv"></div>
+                <div class="mb-3">
+                    <textarea disabled="true" class="form-control" id="debug"
+                              style="word-wrap: break-word;word-break:break-all;height: 500px;display: none"></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Bootstrap core JavaScript
+================================================== -->
+<!-- Placed at the end of the document so the pages load faster -->
+<script src="js/jquery.min.js"></script>
+<script src="js/bootstrap.min.js"></script>
+<script src="js/hmac-sha256.js"></script>
+<script src='signer.js'></script>
+<script>
+    function getCurlString(scheme, req, opts) {
+        var header = " ";
+        for (var h in opts.headers) {
+            header = header + "-H " + JSON.stringify(h + ': ' + opts.headers[h]) + " "
+        }
+        return "curl -X " + opts.method + ' ' + JSON.stringify(scheme + "://" + opts.hostname + opts.path)
+            + header + "-d $'" + JSON.stringify(req.body).slice(1, -1).replace(/'/g, "\\'") + "'"
+    }
+
+    function insertRow(key, value) {
+        var table = document.getElementById("headers");
+        var row = table.insertRow(-1);
+        var newId = Math.random();
+        row.insertCell(0).innerHTML = '<input type="text" class="form-control">';
+        row.insertCell(1).innerHTML = '<input type="text" class="form-control">';
+        row.insertCell(2).innerHTML = '<button class="btn btn-primary" id="' + newId + '" onclick="deleteRow()">Delete</button>';
+        row.cells[0].firstElementChild.value = key;
+        row.cells[1].firstElementChild.value = value;
+    }
+
+    try {
+        $('#appkey').val(localStorage.appkey)
+        var req = JSON.parse(localStorage.req)
+        $('#method').val(req.method)
+        $('#url').val(req.url)
+        $('#body').val(req.body)
+        var table = document.getElementById("headers");
+        for (var k in req.headers) {
+            insertRow(k, req.headers[k])
+        }
+    } catch (e) {
+    }
+    $('#btn-add').click(function () {
+        insertRow("", "")
+    });
+
+    function deleteRow() {
+        var table = document.getElementById("headers");
+        for (var i = 0; i < table.rows.length; i++) {
+            var row = table.rows[i];
+            if (row.cells[2].firstElementChild.id === event.target.id) {
+                table.deleteRow(i);
+            }
+        }
+    }
+
+    function getHeaders() {
+        var headers = {};
+        var table = document.getElementById("headers");
+        for (var i = 0; i < table.rows.length; i++) {
+            var row = table.rows[i];
+            var key = row.cells[0].firstElementChild.value;
+            var value = row.cells[1].firstElementChild.value;
+            if (key.trim() !== '') {
+                headers[key.trim()] = value.trim()
+            }
+        }
+        return headers
+    }
+
+    $('#btn-debug').click(function () {
+        var debug = $('#debug');
+        if (debug.is(":hidden")) {
+            debug.show();
+        } else {
+            debug.hide();
+        }
+    });
+    $('#submit').click(function () {
+        var method = $('#method').val()
+        var url = $('#url').val().trim()
+        var headers = getHeaders()
+        var body = $('#body').val()
+        if (localStorage) {
+            localStorage.req = JSON.stringify({
+                method: method,
+                url: url,
+                headers: headers,
+                body: body
+            });
+        }
+
+        var scheme
+        var index = url.indexOf('://')
+        if (index === -1) {
+            scheme = 'http'
+        } else {
+            scheme = url.substr(0, index)
+        }
+        var req = new signer.HttpRequest(method, url, headers, body)
+        var sig = new signer.Signer();
+        sig.Key = $('#appkey').val().trim()
+        sig.Secret = $('#appsecret').val().trim()
+        if (localStorage) {
+            localStorage.appkey = $('#appkey').val()
+        }
+        var opts = sig.Sign(req);
+        showDebugInfo(req, opts);
+        $('#curl').val(getCurlString(scheme, req, opts))
+        $('#status').html("")
+        $('#recv').html("")
+        $.ajax({
+            type: opts.method,
+            data: req.body,
+            processData: false,
+            url: scheme + "://" + opts.hostname + opts.path,
+            headers: opts.headers,
+            success: function (data) {
+                $('#status').html('200')
+                $('#recv').html(data)
+            },
+            error: function (resp) {
+                if (resp.readyState === 4) {
+                    $('#status').html(resp.status)
+                    $('#recv').html(resp.responseText)
+                } else {
+                    $('#status').html(resp.state())
+                }
+            },
+            timeout: 1000
+        });
+    })
+
+    function showDebugInfo(req, opts) {
+        var new_req = $.extend(true, {}, req);
+        delete new_req.headers.Authorization
+        var headerTime = signer.findHeader(new_req, "x-sdk-date");
+        var signedHeaders = signer.SignedHeaders(new_req);
+        var canonicalRequest = signer.CanonicalRequest(new_req, signedHeaders);
+        var stringToSign = signer.StringToSign(canonicalRequest, headerTime);
+        var authorizationHeader = opts.headers["Authorization"];
+        $("#debug").val("----------canonicalRequest----------\n" + canonicalRequest + "\n----------stringToSign----------\n" + stringToSign + "\n----------authorizationHeader----------\n" + authorizationHeader);
+    }
+</script>
+</body>
+</html>
