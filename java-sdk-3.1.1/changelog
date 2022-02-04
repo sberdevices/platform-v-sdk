@@ -1,0 +1,15 @@
+3.0.6
+add okhttp demo
+
+3.0.5
+add okhttp client for android development
+
+3.0.2
+fixed bugs
+
+3.0.0
+Simplified signature method and the format of signature header, not compatible with previous version
+
+2.0.2
+Repaired the problem of special character in URL, query, or header causes verification failure
+Supported large file upload, and added examples
